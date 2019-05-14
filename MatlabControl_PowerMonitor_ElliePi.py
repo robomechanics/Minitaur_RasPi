@@ -23,7 +23,7 @@ adc = Adafruit_ADS1x15.ADS1115()
 
 #USER INPUTS 
 tcpPort = 50000
-nVariables = 9 #Assumes all variables are of type double
+nVariables = 10 #Assumes all variables are of type double
 debug = True
 
 #SERIAL STUFF
@@ -38,11 +38,9 @@ port = serial.Serial(portAddress, baud, timeout=None)
 print("Sending to: " + port.name)
 
 #TCP STUFF
-#Get number of bytes (all variables should be floats)
-nBytes = nVariables * 9
 #Init last commands to zero
-mDataLast = [0.0]*nVariables
-#mDataLast = mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0, 0.0]
+#mDataLast = [0.0]*nVariables
+mDataLast = mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0, 0.0]
 #Setup TCP connection
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', tcpPort)) #for anyone to connect to
@@ -65,6 +63,7 @@ run = True
 def calculateChecksum(bytes, length):
     checksum = ct.c_ushort(0)
     for i in range(length):
+        print('For place ', i, ' bytes = ',bytes[i])
         checksum = ct.c_ushort(int(checksum.value) + bytes[i]);
     return checksum.value
 
@@ -88,17 +87,20 @@ while(run):
     for chunk in chunks[::-1]:
         if len(chunk) > 0:
             try:
-                newData = struct.unpack('>9f',chunk)
+                newData = struct.unpack('>9fH',chunk)
             except:
                 continue
 
             # Compare checksum
-            checksum = newData[nVariables]
-            checksumCalculated = calculateChecksum(b'GR' + chunk, 2+4*9)
+            checksum = newData[nVariables-1]
+            print('from comp =', checksum)
+            checksumCalculated = calculateChecksum(b'RM' + chunk, 2+4*9+2)
+            print('Calc = ', checksumCalculated)
             # Print state
             if(checksum == checksumCalculated):
-                #print("Times: " + str(RXtime) + " " + str(lastRXtime) + " " + str(RXtime-lastRXtime) + " Robot Sizzle state: " + str(tup[2]))
-                mData = newData[1:nVariables-1]
+                print('I Made It !!!!')
+                mData = newData[1:nVariables-2]
+                print(mData)
                 break
         else:
             mData = mDataLast
@@ -189,7 +191,9 @@ while(run):
 
             # Compare checksum
             checksum = tup[4]
+            print('Working In Sum =', checksum)
             checksumCalculated = calculateChecksum(b'GR' + chunk, 2+4+4+4+4)
+            print('Working Calc =', checksumCalculated)
             # Print state
             if(checksum == checksumCalculated):
                 #print("Times: " + str(RXtime) + " " + str(lastRXtime) + " " + str(RXtime-lastRXtime) + " Robot Sizzle state: " + str(tup[2]))
