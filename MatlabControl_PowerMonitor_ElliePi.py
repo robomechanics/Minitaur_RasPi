@@ -38,7 +38,7 @@ port = serial.Serial(portAddress, baud, timeout=None)
 print("Sending to: " + port.name)
 
 #TCP STUFF
-#Get number of bytes (all variables should be doubles)
+#Get number of bytes (all variables should be floats)
 nBytes = nVariables * 9
 #Init last commands to zero
 mDataLast = [0.0]*nVariables
@@ -83,55 +83,25 @@ while(run):
 
 
     #Read data from TCP connection
-    data = conn.recv(1024)
-    #print('in data =', data,'\n')
-    dataChuncks = data.split(b'RM')
-    #print('dataList = ', dataChuncks,'\n')
-    for dataChunck in dataChuncks[::-1]:
-        if len(dataChunck) > 0:
+    tcpData = conn.recv(1024)
+    chunks = tcpData.split(b'RM')
+    for chunk in chunks[::-1]:
+        if len(chunk) > 0:
             try:
-                mData = struct.unpack('>9f',dataChunck)
-                #print('made it!!!')
-                print('unpack = ',mData, '\n')
-
-   # if len(data) == nBytes:
-                #mData = array.array('f', dataChunck)
-                #Check native byte order
-                #if sys.byteorder in 'little':
-                    # use big endian for reading from Matlab
-                    #mData.byteswap()
-                #print('NEW DATA!!!!!!!! ', mData)
-                #print('\n')
+                newData = struct.unpack('>9f',chunk)
             except:
                 continue
+
+            # Compare checksum
+            checksum = newData[nVariables]
+            checksumCalculated = calculateChecksum(b'GR' + chunk, 2+4*9)
+            # Print state
+            if(checksum == checksumCalculated):
+                #print("Times: " + str(RXtime) + " " + str(lastRXtime) + " " + str(RXtime-lastRXtime) + " Robot Sizzle state: " + str(tup[2]))
+                mData = newData[1:nVariables-1]
+                break
         else:
             mData = mDataLast
-
-
-    # Old Code for setting up behavior struct ----
-    # Init
-    # linear = {}
-    # angular = {}
-    # position = {}
-    # orientation = {}
-
-    # Set values
-    # id = 0
-    # mode = 1 # BehaviorMode_RUN
-
-    # linear['x'] = mData[0]
-    # linear['z'] = 0
-    # angular['x'] = 0
-    # angular['y'] = 0
-    # angular['z'] = mData[1]
-    # position['x'] = 0
-    # position['y'] = 0
-    # position['z'] = 0
-    # orientation['x'] = 0
-    # orientation['y'] = 0
-    # orientation['z'] = 0
-    # orientation['w'] = 0
-    #-------------------------------------------
 
     #Assign tcp data to variables (for readability)
     fwdVel = mData[0]
@@ -144,21 +114,6 @@ while(run):
     var5 = mData[6]
     var6 = mData[7]
     var7 = mData[8]
-    
-    #print("Vars  ", fwdVel, ',  ', yaw, ',  ',var1, ',  ', var2, ',  ', var3)
-
-    # Pack BehaviorCmd. Definition is at the end of this file in comments.
-    # Packet version number, BehaviorCmd: {id, twist.linear, twist.angular, pose.position, pose.orientation, mode}
-    
-    # Old Code for setting up behavior struct -------------------------------------------------------
-    # behavior_command = struct.pack( '<II3f3f3f4fI', 1, # Version 1 of serial packet format
-    #                                                 id, 
-    #                                                 linear['x'], linear['y'], linear['z'], 
-    #                                                 angular['x'], angular['y'], angular['z'],
-    #                                                 position['x'], position['y'], position['z'],
-    #                                                 orientation['x'], orientation['y'], orientation['z'], orientation['w'],
-    #                                                 mode)
-    # --------------------------------------------------------------------------------------------------
 
     # Custom packet for hardware in the loop optimizations
     behavior_command = struct.pack( '<I2f4f3f', 1, # Version 1 of serial packet format
