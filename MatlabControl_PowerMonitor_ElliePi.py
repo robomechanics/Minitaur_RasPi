@@ -1,0 +1,290 @@
+#
+# Copyright (C) Ghost Robotics - All Rights Reserved
+# Unauthorized copying of this file, via any medium is strictly prohibited
+# Proprietary and confidential
+# Written by Tom Jacobs <tom.jacobs@ghostrobotics.io>, Avik De <avik@ghostrobotics.io>
+#
+# Command: Sends BehaviorCmds to the robot to command its behavior.
+
+import struct
+import serial
+import math
+#from time import sleep
+import time
+import ctypes as ct
+import socket
+import array
+import sys
+import signal
+import Adafruit_ADS1x15
+import subprocess
+
+adc = Adafruit_ADS1x15.ADS1115()
+
+#USER INPUTS 
+tcpPort = 50000
+nVariables = 9 #Assumes all variables are of type double
+debug = True
+
+#SERIAL STUFF
+# Open USB port
+portAddress = "/dev/ttyS0"
+#portAddress = "/dev/tty.usbserial-DN01QAKV"
+#portAddress = "COM29"
+baud = 115200
+# baud = 230400
+# No timeout so we can keep going with whatever bytes are in waiting
+port = serial.Serial(portAddress, baud, timeout=None)
+print("Sending to: " + port.name)
+
+#TCP STUFF
+#Get number of bytes (all variables should be doubles)
+nBytes = nVariables * 9
+#Init last commands to zero
+mDataLast = [0.0]*nVariables
+mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0]
+#Setup TCP connection
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('', tcpPort)) #for anyone to connect to
+s.listen(1)
+print ("waiting for response from client at port ",tcpPort)
+#function hangs until connected to by Matlab
+#TODO: add explicit timeout?
+conn, addr = s.accept()
+print ('Connected by', addr)
+
+#init values
+rxBuf = b''
+adc01 = adc23 = adc01Last = adc23Last = 0.0
+sizzleFlag = 0.0
+motorTemp = 0.0
+startTime = time.time()
+#Init main while loop variable to True
+run = True
+
+def calculateChecksum(bytes, length):
+    checksum = ct.c_ushort(0)
+    for i in range(length):
+        checksum = ct.c_ushort(int(checksum.value) + bytes[i]);
+    return checksum.value
+
+# Handle for getting Ctrl+C input, exits main while loop
+def exitHandle(signal, frame):
+    global run
+    print('\nClosing connection and exiting function')
+    run = False
+
+print('Press Ctrl+C to exit function')
+
+while(run):
+
+    #Check if user wants to end function
+    signal.signal(signal.SIGINT, exitHandle)
+
+    try:
+        #Read data from TCP connection
+        data = conn.recv(50)
+        print('in data =', data,'\n')
+        dataChuncks = data.split(b'RM')
+        print('dataList = ', dataChuncks,'\n')
+        if dataChunck in dataChuncks:
+            if len(dataChunck) > 0:
+                mDataTemp = struct.unpack('>3f',dataChunck)
+                print('made it!!!')
+                print('mData = ',mDataTemp, '\n')
+
+       # if len(data) == nBytes:
+           # mData = array.array('d', data)
+            #Check native byte order
+            #if sys.byteorder in 'little':
+                # use big endian for reading from Matlab
+               # mData.byteswap()
+            else:
+                mData = mDataLast
+    except:
+        print("...")
+        mData = mDataLast
+        continue
+
+    # Old Code for setting up behavior struct ----
+    # Init
+    # linear = {}
+    # angular = {}
+    # position = {}
+    # orientation = {}
+
+    # Set values
+    # id = 0
+    # mode = 1 # BehaviorMode_RUN
+
+    # linear['x'] = mData[0]
+    # linear['z'] = 0
+    # angular['x'] = 0
+    # angular['y'] = 0
+    # angular['z'] = mData[1]
+    # position['x'] = 0
+    # position['y'] = 0
+    # position['z'] = 0
+    # orientation['x'] = 0
+    # orientation['y'] = 0
+    # orientation['z'] = 0
+    # orientation['w'] = 0
+    #-------------------------------------------
+
+    #Assign tcp data to variables (for readability)
+    fwdVel = mData[0]
+    yaw = mData[1]
+
+    var1 = mData[2]
+    var2 = mData[3]
+    var3 = mData[4]
+    var4 = mData[5]
+    var5 = mData[6]
+    var6 = mData[7]
+    var7 = mData[8]
+    
+    #print("Vars  ", fwdVel, ',  ', yaw, ',  ',var1, ',  ', var2, ',  ', var3)
+
+    # Pack BehaviorCmd. Definition is at the end of this file in comments.
+    # Packet version number, BehaviorCmd: {id, twist.linear, twist.angular, pose.position, pose.orientation, mode}
+    
+    # Old Code for setting up behavior struct -------------------------------------------------------
+    # behavior_command = struct.pack( '<II3f3f3f4fI', 1, # Version 1 of serial packet format
+    #                                                 id, 
+    #                                                 linear['x'], linear['y'], linear['z'], 
+    #                                                 angular['x'], angular['y'], angular['z'],
+    #                                                 position['x'], position['y'], position['z'],
+    #                                                 orientation['x'], orientation['y'], orientation['z'], orientation['w'],
+    #                                                 mode)
+    # --------------------------------------------------------------------------------------------------
+
+    # Custom packet for hardware in the loop optimizations
+    behavior_command = struct.pack( '<I2f4f3f', 1, # Version 1 of serial packet format
+                                                    fwdVel,yaw,
+                                                    var1,var2,var3,var4,
+                                                    var5,var6,var7)
+
+
+    # Calculate and append checksum, prepend align bytes
+    checksum = calculateChecksum(behavior_command, len(behavior_command))
+    behavior_command = struct.pack('<cc', b"G", b"R") + behavior_command + struct.pack('<H', checksum)
+
+    try:
+        # Send BehaviorCmd via serial
+        port.write(behavior_command)
+    except:
+        print('failed to write to minitaur')
+        continue
+
+    #Get Power Consumption and send back to Matlab
+    try:
+    	adc01 = adc.read_adc_difference(0, gain=8, data_rate=860)
+    	time.sleep(0.001)
+    	adc23 = adc.read_adc_difference(3, gain=8, data_rate=860)
+    	pTime = time.time() - startTime
+    	#print('pTime = ',pTime)
+    except IOError:
+        print("restarted")
+
+        subprocess.call(['i2cdetect', '-y', '1'])
+	
+        adc01 = adc01Last
+        adc23 = adc23Last
+
+    voltageDiff1 = adc01 * 0.00001562547
+    voltageDiff2 = adc23 * 0.00001562547
+    current = voltageDiff1 * -1000
+    voltage = voltageDiff2 * 39.4039
+
+    adc01Last = adc01
+    adc23Last = adc23
+
+    #voltage = 0
+
+    #print(voltage,", ",current)
+
+    # Pack data into byte array for binary send: Two floats (voltage, current)
+    powerData = bytearray(struct.pack( '>5f', voltage, current, pTime, sizzleFlag, motorTemp))
+
+    # Send data via socket connection
+    try:
+        conn.send(powerData)
+    except:
+        print('sending power data failed')
+        continue
+
+    # Debug Loop: Read incoming data
+    if debug:
+        exitFlag = False
+        rxBuf = port.read(50)
+        chunks = rxBuf.split(b'GR')
+        #print('chuncks List = ',chunks, '\n')
+        for chunk in chunks[::-1]:
+            if ~exitFlag:
+                if len(chunk) > 0:
+                    #print('chunck In, ', chunk, '\n')
+                    try:
+                        # Parse packet into tuple: time, lastRX time, 3 float robot state, checksum 
+                        tup = struct.unpack('<3IfH', chunk)
+                    except:
+                        continue
+
+                    # Get times
+                    RXtime = tup[0]
+                    lastRXtime = tup[1]
+
+                    # Compare checksum
+                    checksum = tup[4]
+                    checksumCalculated = calculateChecksum(b'GR' + chunk, 2+4+4+4+4)
+                    # Print state
+                    if(checksum == checksumCalculated):
+                        #print("Times: " + str(RXtime) + " " + str(lastRXtime) + " " + str(RXtime-lastRXtime) + " Robot Sizzle state: " + str(tup[2]))
+                        sizzleFlag = float(tup[2])
+                        motorTemp = tup[3]
+                        exitFlag = True
+                        #print('ExitFlag On\n')
+            else:
+                #print('Im out\n')
+                continue
+            # Put back the last (possibly unfinished) chunk
+            # rxBuf = chunks[-1]
+    # Save last commands from Matlab
+    mDataLast = mData
+
+# Close Conections
+port.close()        
+conn.close()
+print('Connection closed')
+
+
+# BehaviorCmd definition:
+
+# typedef struct _BehaviorCmd {
+#     uint32_t id;
+#     Twist twist;
+#     Pose pose;
+#     uint32_t mode;
+# } BehaviorCmd;
+
+# typedef struct _Twist {
+#     Vector3 linear;
+#     Vector3 angular;
+# } Twist;
+
+# typedef struct _Pose {
+#     Vector3 position;
+#     Quaternion orientation;
+# } Pose;
+
+# typedef struct _Vector3 {
+#     float x;
+#     float y;
+#     float z;
+# } Vector3;
+
+# typedef struct _Quaternion {
+#     float x;
+#     float y;
+#     float z;
+#     float w;
+# } Quaternion;
