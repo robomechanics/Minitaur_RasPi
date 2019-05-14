@@ -41,8 +41,8 @@ print("Sending to: " + port.name)
 #Get number of bytes (all variables should be doubles)
 nBytes = nVariables * 9
 #Init last commands to zero
-#mDataLast = [0.0]*nVariables
-mDataLast = mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0, 0.0]
+mDataLast = [0.0]*nVariables
+#mDataLast = mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0, 0.0]
 #Setup TCP connection
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', tcpPort)) #for anyone to connect to
@@ -84,25 +84,26 @@ while(run):
 
     #Read data from TCP connection
     data = conn.recv(1024)
-    print('in data =', data,'\n')
+    #print('in data =', data,'\n')
     dataChuncks = data.split(b'RM')
-    print('dataList = ', dataChuncks,'\n')
+    #print('dataList = ', dataChuncks,'\n')
     for dataChunck in dataChuncks[::-1]:
         if len(dataChunck) > 0:
-        	try:
-            #mDataTemp = struct.unpack('>3f',dataChunck)
-            #print('made it!!!')
-            #print('mData = ',mDataTemp, '\n')
+            try:
+                mData = struct.unpack('>9f',dataChunck)
+                #print('made it!!!')
+                print('unpack = ',mData, '\n')
 
    # if len(data) == nBytes:
-                mData = array.array('d', data)
+                #mData = array.array('f', dataChunck)
                 #Check native byte order
-                if sys.byteorder in 'little':
+                #if sys.byteorder in 'little':
                     # use big endian for reading from Matlab
-                    mData.byteswap()
+                    #mData.byteswap()
+                #print('NEW DATA!!!!!!!! ', mData)
+                #print('\n')
             except:
-            	print('not today')
-            	continue
+                continue
         else:
             mData = mDataLast
 
@@ -215,38 +216,35 @@ while(run):
         continue
 
     # Debug Loop: Read incoming data
-    if debug:
-        exitFlag = False
-        rxBuf = port.read(50)
-        chunks = rxBuf.split(b'GR')
-        #print('chuncks List = ',chunks, '\n')
-        for chunk in chunks[::-1]:
-            if ~exitFlag:
-                if len(chunk) > 0:
-                    #print('chunck In, ', chunk, '\n')
-                    try:
-                        # Parse packet into tuple: time, lastRX time, 3 float robot state, checksum 
-                        tup = struct.unpack('<3IfH', chunk)
-                    except:
-                        continue
-
-                    # Get times
-                    RXtime = tup[0]
-                    lastRXtime = tup[1]
-
-                    # Compare checksum
-                    checksum = tup[4]
-                    checksumCalculated = calculateChecksum(b'GR' + chunk, 2+4+4+4+4)
-                    # Print state
-                    if(checksum == checksumCalculated):
-                        #print("Times: " + str(RXtime) + " " + str(lastRXtime) + " " + str(RXtime-lastRXtime) + " Robot Sizzle state: " + str(tup[2]))
-                        sizzleFlag = float(tup[2])
-                        motorTemp = tup[3]
-                        exitFlag = True
-                        #print('ExitFlag On\n')
-            else:
-                #print('Im out\n')
+    rxBuf = port.read(50)
+    chunks = rxBuf.split(b'GR')
+    #print('chuncks List = ',chunks, '\n')
+    for chunk in chunks[::-1]:
+        if len(chunk) > 0:
+            #print('chunck In, ', chunk, '\n')
+            try:
+                # Parse packet into tuple: time, lastRX time, 3 float robot state, checksum 
+                tup = struct.unpack('<3IfH', chunk)
+            except:
                 continue
+
+            # Get times
+            RXtime = tup[0]
+            lastRXtime = tup[1]
+
+            # Compare checksum
+            checksum = tup[4]
+            checksumCalculated = calculateChecksum(b'GR' + chunk, 2+4+4+4+4)
+            # Print state
+            if(checksum == checksumCalculated):
+                #print("Times: " + str(RXtime) + " " + str(lastRXtime) + " " + str(RXtime-lastRXtime) + " Robot Sizzle state: " + str(tup[2]))
+                sizzleFlag = float(tup[2])
+                motorTemp = tup[3]
+                exitFlag = True
+                break
+        else:
+            #print('Im out\n')
+            continue
             # Put back the last (possibly unfinished) chunk
             # rxBuf = chunks[-1]
     # Save last commands from Matlab
