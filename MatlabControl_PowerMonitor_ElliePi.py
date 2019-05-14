@@ -41,8 +41,8 @@ print("Sending to: " + port.name)
 #Get number of bytes (all variables should be doubles)
 nBytes = nVariables * 9
 #Init last commands to zero
-mDataLast = [0.0]*nVariables
-mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0]
+#mDataLast = [0.0]*nVariables
+mDataLast = mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0, 0.0]
 #Setup TCP connection
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', tcpPort)) #for anyone to connect to
@@ -81,30 +81,31 @@ while(run):
     #Check if user wants to end function
     signal.signal(signal.SIGINT, exitHandle)
 
-    try:
-        #Read data from TCP connection
-        data = conn.recv(50)
-        print('in data =', data,'\n')
-        dataChuncks = data.split(b'RM')
-        print('dataList = ', dataChuncks,'\n')
-        if dataChunck in dataChuncks:
-            if len(dataChunck) > 0:
-                mDataTemp = struct.unpack('>3f',dataChunck)
-                print('made it!!!')
-                print('mData = ',mDataTemp, '\n')
 
-       # if len(data) == nBytes:
-           # mData = array.array('d', data)
-            #Check native byte order
-            #if sys.byteorder in 'little':
-                # use big endian for reading from Matlab
-               # mData.byteswap()
-            else:
-                mData = mDataLast
-    except:
-        print("...")
-        mData = mDataLast
-        continue
+    #Read data from TCP connection
+    data = conn.recv(1024)
+    print('in data =', data,'\n')
+    dataChuncks = data.split(b'RM')
+    print('dataList = ', dataChuncks,'\n')
+    for dataChunck in dataChuncks[::-1]:
+        if len(dataChunck) > 0:
+        	try:
+            #mDataTemp = struct.unpack('>3f',dataChunck)
+            #print('made it!!!')
+            #print('mData = ',mDataTemp, '\n')
+
+   # if len(data) == nBytes:
+                mData = array.array('d', data)
+                #Check native byte order
+                if sys.byteorder in 'little':
+                    # use big endian for reading from Matlab
+                    mData.byteswap()
+            except:
+            	print('not today')
+            	continue
+        else:
+            mData = mDataLast
+
 
     # Old Code for setting up behavior struct ----
     # Init
