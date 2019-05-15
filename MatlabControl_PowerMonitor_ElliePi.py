@@ -39,8 +39,8 @@ print("Sending to: " + port.name)
 
 #TCP STUFF
 #Init last commands to zero
-#mDataLast = [0.0]*nVariables
-mDataLast = mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0, 0.0]
+mDataLast = [0.0]*nVariables
+#mDataLast = mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0, 0.0]
 #Setup TCP connection
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('', tcpPort)) #for anyone to connect to
@@ -63,7 +63,6 @@ run = True
 def calculateChecksum(bytes, length):
     checksum = ct.c_ushort(0)
     for i in range(length):
-        print('For place ', i, ' bytes = ',bytes[i])
         checksum = ct.c_ushort(int(checksum.value) + bytes[i]);
     return checksum.value
 
@@ -93,14 +92,10 @@ while(run):
 
             # Compare checksum
             checksum = newData[nVariables-1]
-            print('from comp =', checksum)
-            checksumCalculated = calculateChecksum(b'RM' + chunk, 2+4*9+2)
-            print('Calc = ', checksumCalculated)
+            checksumCalculated = calculateChecksum(chunk, 4*9)
             # Print state
             if(checksum == checksumCalculated):
-                print('I Made It !!!!')
-                mData = newData[1:nVariables-2]
-                print(mData)
+                mData = newData[:nVariables-1:1]
                 break
         else:
             mData = mDataLast
