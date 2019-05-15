@@ -158,7 +158,7 @@ while(run):
     #print(voltage,", ",current)
 
     # Pack data into byte array for binary send: Two floats (voltage, current)
-    powerData = bytearray(struct.pack( '>5f', voltage, current, pTime, sizzleFlag, motorTemp))
+    powerData = bytearray(struct.pack('>cc',b"R", b"M") +struct.pack( '>5f', voltage, current, pTime, sizzleFlag, motorTemp))
 
     # Send data via socket connection
     try:
