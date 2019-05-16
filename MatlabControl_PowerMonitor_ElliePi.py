@@ -47,7 +47,6 @@ s.bind(('', tcpPort)) #for anyone to connect to
 s.listen(1)
 print ("waiting for response from client at port ",tcpPort)
 #function hangs until connected to by Matlab
-#TODO: add explicit timeout?
 conn, addr = s.accept()
 print ('Connected by', addr)
 
@@ -86,15 +85,16 @@ while(run):
     for chunk in chunks[::-1]:
         if len(chunk) > 0:
             try:
+                #Parse data from Main Computer(fwdvel,yawCmd,opt vars 1-7)
                 newData = struct.unpack('>9fH',chunk)
             except:
                 continue
 
             # Compare checksum
             checksum = newData[nVariables-1]
-            checksumCalculated = calculateChecksum(chunk, 4*9)
-            # Print state
+            checksumCalculated = calculateChecksum(chunk, 4*9) #9 Floats
             if(checksum == checksumCalculated):
+                #Save State Data
                 mData = newData[:nVariables-1:1]
                 break
         else:
@@ -124,56 +124,53 @@ while(run):
     behavior_command = struct.pack('<cc', b"G", b"R") + behavior_command + struct.pack('<H', checksum)
 
     try:
-        # Send BehaviorCmd via serial
+        #Send BehaviorCmd via serial
         port.write(behavior_command)
     except:
-        print('failed to write to minitaur')
+        print('ElliePi failed to send data to Minitaur!!!, moving on')
         continue
 
-    #Get Power Consumption and send back to Matlab
+    #Try to get Power Consumption Data
     try:
     	adc01 = adc.read_adc_difference(0, gain=8, data_rate=860)
     	time.sleep(0.001)
     	adc23 = adc.read_adc_difference(3, gain=8, data_rate=860)
     	pTime = time.time() - startTime
-    	#print('pTime = ',pTime)
     except IOError:
-        print("restarted")
-
+        print("Restarting Power Monitoring Board!!!")
         subprocess.call(['i2cdetect', '-y', '1'])
-	
         adc01 = adc01Last
         adc23 = adc23Last
+        continue
 
+    #Calc current and Voltage
     voltageDiff1 = adc01 * 0.00001562547
     voltageDiff2 = adc23 * 0.00001562547
     current = voltageDiff1 * -1000
     voltage = voltageDiff2 * 39.4039
 
+    #save last values
     adc01Last = adc01
     adc23Last = adc23
 
-    #voltage = 0
-
-    #print(voltage,", ",current)
-
+    #setup return packet to main computer
+    rtnPack = struct.pack('<5f',voltage, current, pTime, sizzleFlag, motorTemp)
+    rtnChecksum = calculateChecksum(rtnPack, 5*4) #5 floats
     # Pack data into byte array for binary send: Two floats (voltage, current)
-    powerData = bytearray(struct.pack('>cc',b"R", b"M") +struct.pack( '>5f', voltage, current, pTime, sizzleFlag, motorTemp))
+    powerData = struct.pack('>cc',b"R", b"M") + rtnPack + struct.pack('<H',rtnChecksum)
 
     # Send data via socket connection
     try:
         conn.send(powerData)
     except:
-        print('sending power data failed')
+        print('ElliePi failed to send data to Main Computer!!!, moving on')
         continue
 
     # Debug Loop: Read incoming data
     rxBuf = port.read(50)
     chunks = rxBuf.split(b'GR')
-    #print('chuncks List = ',chunks, '\n')
     for chunk in chunks[::-1]:
         if len(chunk) > 0:
-            #print('chunck In, ', chunk, '\n')
             try:
                 # Parse packet into tuple: time, lastRX time, 3 float robot state, checksum 
                 tup = struct.unpack('<3IfH', chunk)
@@ -186,9 +183,7 @@ while(run):
 
             # Compare checksum
             checksum = tup[4]
-            print('Working In Sum =', checksum)
             checksumCalculated = calculateChecksum(b'GR' + chunk, 2+4+4+4+4)
-            print('Working Calc =', checksumCalculated)
             # Print state
             if(checksum == checksumCalculated):
                 #print("Times: " + str(RXtime) + " " + str(lastRXtime) + " " + str(RXtime-lastRXtime) + " Robot Sizzle state: " + str(tup[2]))
@@ -197,7 +192,6 @@ while(run):
                 exitFlag = True
                 break
         else:
-            #print('Im out\n')
             continue
             # Put back the last (possibly unfinished) chunk
             # rxBuf = chunks[-1]
@@ -205,7 +199,7 @@ while(run):
     mDataLast = mData
 
 # Close Conections
-port.close()        
+port.close()
 conn.close()
 print('Connection closed')
 
