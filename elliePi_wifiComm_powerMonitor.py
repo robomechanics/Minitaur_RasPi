@@ -40,6 +40,7 @@ print("Sending to: " + port.name)
 #TCP STUFF
 #Init last commands to zero
 mDataLast = [0.0]*nVariables
+pTime = 0.0
 #mDataLast = mData = [0.0, 0.0, 2.0, 0.45, 0.0, 0.0, 0.0, 0.0, 0.0]
 #Setup TCP connection
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
