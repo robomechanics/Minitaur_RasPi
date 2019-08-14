@@ -89,16 +89,18 @@ while(run):
             try:
                 #Parse data from Main Computer(fwdvel,yawCmd,opt vars 1-7)
                 newData = struct.unpack('>9fH',chunk)
-            except:
-                continue
 
-            # Compare checksum
-            checksum = newData[nVariables-1]
-            checksumCalculated = calculateChecksum(chunk, 4*9) #9 Floats
-            if(checksum == checksumCalculated):
-                #Save State Data
-                mData = newData[:nVariables-1:1]
-                break
+                # Compare checksum
+                checksum = newData[nVariables-1]
+                checksumCalculated = calculateChecksum(chunk, 4*9) #9 Floats
+                if(checksum == checksumCalculated):
+                    #Save State Data
+                    mData = newData[:nVariables-1:1]
+                    break
+
+            except:
+                mData = mDataLast
+                continue
         else:
             mData = mDataLast
 
@@ -133,35 +135,35 @@ while(run):
         continue
 
     #Try to get Power Consumption Data
-    try:
-    	adc01 = adc.read_adc_difference(0, gain=8, data_rate=860)
-    	time.sleep(0.001)
-    	adc23 = adc.read_adc_difference(3, gain=8, data_rate=860)
-    	pTime = time.time() - startTime
-    except IOError:
-        print("Restarting Power Monitoring Board!!!")
-        subprocess.call(['i2cdetect', '-y', '1'])
-        adc01 = adc01Last
-        adc23 = adc23Last
-        pTime = pTimeLast
-        continue
+    # try:
+    # 	adc01 = adc.read_adc_difference(0, gain=8, data_rate=860)
+    # 	time.sleep(0.001)
+    # 	adc23 = adc.read_adc_difference(3, gain=8, data_rate=860)
+    # 	pTime = time.time() - startTime
+    # except IOError:
+    #     print("Restarting Power Monitoring Board!!!")
+    #     subprocess.call(['i2cdetect', '-y', '1'])
+    #     adc01 = adc01Last
+    #     adc23 = adc23Last
+    #     pTime = pTimeLast
+    #     continue
 
-    #Calc current and Voltage
-    voltageDiff1 = adc01 * 0.00001562547
-    voltageDiff2 = adc23 * 0.00001562547
-    current = voltageDiff1 * -1000
-    voltage = voltageDiff2 * 39.4039
+    # #Calc current and Voltage
+    # voltageDiff1 = adc01 * 0.00001562547
+    # voltageDiff2 = adc23 * 0.00001562547
+    # current = voltageDiff1 * -1000
+    # voltage = voltageDiff2 * 39.4039
 
-    dt = pTime - pTimeLast
+    # dt = pTime - pTimeLast
 
-    if (dt > 0):
-    	totEnergy += voltage*current*dt
-    else:
-    	print('dt value = ',dt)
+    # if (dt > 0):
+    # 	totEnergy += voltage*current*dt
+    # else:
+    # 	print('dt value = ',dt)
 
-    #save last values
-    adc01Last = adc01
-    adc23Last = adc23
+    # #save last values
+    # adc01Last = adc01
+    # adc23Last = adc23
 
     #setup return packet to main computer
     rtnPack = struct.pack('<3f',totEnergy, sizzleFlag, motorTemp)
