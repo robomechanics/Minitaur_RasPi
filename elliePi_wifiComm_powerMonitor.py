@@ -179,8 +179,6 @@ while(run):
         print('ElliePi failed to send data to Main Computer!!!, moving on')
         continue
 
-    print('Energy Data = ',totEnergy,', at time: ',pTime)
-
     # Debug Loop: Read incoming data
     rxBuf = port.read(50)
     chunks = rxBuf.split(b'GR')
