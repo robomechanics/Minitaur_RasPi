@@ -167,7 +167,7 @@ while(run):
     adc23Last = adc23
 
     #setup return packet to main computer
-    rtnPack = struct.pack('<3f',totEnergy, sizzleFlag, motorTemp)
+    rtnPack = struct.pack('<3f',totEnergy, pTime, motorTemp)
     rtnChecksum = calculateChecksum(rtnPack, 3*4) #3 floats
     # Pack data into byte array for binary send
     powerData = struct.pack('>cc',b"R", b"M") + rtnPack + struct.pack('<H',rtnChecksum)
@@ -178,6 +178,8 @@ while(run):
     except:
         print('ElliePi failed to send data to Main Computer!!!, moving on')
         continue
+
+    print('Energy Data = ',totEnergy,', at time: ',pTime)
 
     # Debug Loop: Read incoming data
     rxBuf = port.read(50)
